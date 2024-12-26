@@ -1,0 +1,208 @@
+Commands and shell-scripts
+
+Real-time Pod Logs Streaming (with timestamp)
+
+kubectl get pods --all-namespaces --output=json | jq -r '.items[] | .metadata.namespace + "/" + .metadata.name' 
+
+To stream logs in real-time from all pods across the entire cluster, you can use the following script:
+#!/bin/bash
+# Stream logs from all pods across all namespaces
+
+echo "Streaming logs from all pods in real-time..."
+kubectl get pods --all-namespaces --output=json | jq -r '.items[] | .metadata.namespace + "/" + .metadata.name' | while read pod; do
+  namespace=$(echo $pod | cut -d'/' -f1)
+  pod_name=$(echo $pod | cut -d'/' -f2)
+  kubectl logs -f -n $namespace $pod_name --tail=1000 --timestamps &
+done
+wait
+
+This script uses jq to extract pod names from the kubectl get pods output, then continuously streams the logs from those pods in real-time. You can adjust the --tail option to show more or fewer logs.
+
+Explanation:
+kubectl get pods --all-namespaces --output=json: Retrieves a list of all pods in all namespaces in JSON format.
+jq -r: Processes the JSON output with jq and prints the result in raw format (as strings).
+.items[]: Iterates over all the pods in the JSON array.
+.metadata.namespace + "/" + .metadata.name: Combines the namespace and name of each pod in the format namespace/pod-name.
+
+=======================================================================
+Real-time Pod Resource Usage Monitoring
+
+To monitor pod CPU and memory usage in real time:
+
+#!/bin/bash
+# Real-time monitoring of CPU and Memory usage of Pods
+
+echo "Monitoring pod resource usage..."
+
+while true; do
+  kubectl top pods --all-namespaces --no-headers | awk '{print $1,$2,$3,$4}' | sort -k3 -nr
+  sleep 2
+done
+
+This script uses kubectl top to get CPU and memory usage, then sorts by CPU usage and prints the top pods with the highest resource consumption. The loop runs every 2 seconds for real-time monitoring.
+Explanation:
+kubectl top pods --all-namespaces --no-headers:
+This command fetches the current CPU and memory usage of all pods in all namespaces.
+The --no-headers flag omits the header row from the output.
+awk '{print $1,$2,$3,$4}':
+awk processes the output from kubectl top pods. Each line contains the namespace, pod name, CPU usage, and memory usage.
+This awk command prints the first four columns, which correspond to:
+$1: Namespace
+$2: Pod name
+$3: CPU usage
+$4: Memory usage
+sort -k3 -nr:
+sort is used to sort the output.
+-k3 sorts the output based on the third column (CPU usage).
+-nr means numeric (-n) sorting in reverse order (-r), so it will sort the pods in descending order of CPU usage.
+
+=======================================================================
+
+Pod Restart Trigger
+This script will restart a pod if it’s been running for a specified period of time.
+
+#!/bin/bash
+# Restart pods after X days of running
+
+DAYS_LIMIT=7
+CURRENT_DATE=$(date +%s)
+
+kubectl get pods --all-namespaces -o json | jq -r \
+  '.items[] | select(.status.startTime != null) | 
+  .metadata.namespace + "/" + .metadata.name + " " + .status.startTime' | while read line; do
+    pod_start_time=$(echo $line | cut -d' ' -f2)
+    pod_namespace=$(echo $line | cut -d' ' -f1 | cut -d'/' -f1)
+    pod_name=$(echo $line | cut -d' ' -f1 | cut -d'/' -f2)
+
+    start_epoch=$(date -d "$pod_start_time" +%s)
+    let uptime=($CURRENT_DATE-$start_epoch)/86400
+
+    if [ $uptime -ge $DAYS_LIMIT ]; then
+      echo "Restarting pod: $pod_namespace/$pod_name (uptime: $uptime days)"
+      kubectl delete pod -n $pod_namespace $pod_name
+    fi
+done
+
+This script checks the age of each pod and deletes any pod that has been running longer than the defined DAYS_LIMIT.
+jq -r
+jq: A command-line JSON processor used for querying, filtering, and manipulating JSON data.
+-r: This option tells jq to output the result in raw format (i.e., plain text) instead of JSON-encoded strings. Without this flag, jq would wrap the result in quotes.
+'.items[]
+.items[]: The items key in the JSON response is an array that contains all the pods. Using .items[] iterates over each element (pod) in that array.
+select(.status.startTime != null)
+select(.status.startTime != null): This filters out any pods that don't have a startTime field in their status. Pods that do not have a start time (perhaps because they haven't started or there was an issue fetching the pod's status) will be excluded from the output.
+.metadata.namespace + "/" + .metadata.name + " " + .status.startTime
+.metadata.namespace + "/" + .metadata.name: This combines the namespace and name of each pod, creating a string like namespace/pod-name.
++ " " + .status.startTime: This appends the pod's startTime to the pod's namespace/name string, separated by a space. The startTime is in ISO 8601 format, such as 2023-10-12T12:34:56Z.
+
+=======================================================================
+
+4. Kubernetes Cluster Health Check
+This script checks the health of various components in your cluster:
+
+#!/bin/bash
+# Kubernetes Cluster Health Check Script
+
+echo "Checking cluster components health..."
+kubectl get nodes -o wide
+kubectl get pods --all-namespaces -o wide
+kubectl get svc --all-namespaces
+kubectl get deployments --all-namespaces
+
+echo "Checking kube-system namespace pods..."
+kubectl get pods -n kube-system
+
+echo "Checking if kubectl is able to access the cluster..."
+kubectl cluster-info
+
+echo "Checking Kubernetes version..."
+kubectl version —short
+
+This script gathers health status for nodes, pods, services, deployments, and the kube-system namespace, which is vital for the cluster’s functioning.
+5. Backup and Restore Script for ConfigMaps and Secrets
+A script to backup and restore ConfigMaps and Secrets across namespaces.
+Backup
+#!/bin/bash
+# Backup all ConfigMaps and Secrets from all namespaces
+BACKUP_DIR="./k8s-backup"
+mkdir -p $BACKUP_DIR
+echo "Backing up ConfigMaps and Secrets..."
+kubectl get configmaps --all-namespaces -o json > $BACKUP_DIR/configmaps-backup.json
+kubectl get secrets --all-namespaces -o json > $BACKUP_DIR/secrets-backup.json
+
+echo "Backup completed. Files stored in $BACKUP_DIR"
+Restore
+
+#!/bin/bash
+# Restore ConfigMaps and Secrets from backup
+
+BACKUP_DIR="./k8s-backup"
+
+echo "Restoring ConfigMaps..."
+cat $BACKUP_DIR/configmaps-backup.json | kubectl apply -f -
+
+echo "Restoring Secrets..."
+cat $BACKUP_DIR/secrets-backup.json | kubectl apply -f -
+
+echo "Restore completed.”
+
+6. Advanced Node Resource Usage
+For detailed monitoring of node-level resources (CPU, memory), use:
+
+#!/bin/bash
+# Monitor CPU and memory usage for each node
+
+kubectl top nodes --no-headers | while read line; do
+  node_name=$(echo $line | awk '{print $1}')
+  cpu_usage=$(echo $line | awk '{print $2}')
+  mem_usage=$(echo $line | awk '{print $3}')
+
+  echo "Node: $node_name - CPU: $cpu_usage - Memory: $mem_usage"
+done
+
+This script uses kubectl top nodes to fetch and display CPU and memory usage for each node.
+7. Scaling Pods Automatically Based on Resource Usage
+This script will automatically scale a deployment based on CPU usage:
+
+#!/bin/bash
+# Auto-scaling based on CPU usage (example for "my-deployment")
+
+DEPLOYMENT_NAME="my-deployment"
+NAMESPACE="default"
+CPU_THRESHOLD=80  # CPU usage percentage to scale up/down
+
+while true; do
+  cpu_usage=$(kubectl top pods -n $NAMESPACE | grep $DEPLOYMENT_NAME | awk '{print $3}' | sed 's/%//')
+
+  if [ $cpu_usage -ge $CPU_THRESHOLD ]; then
+    echo "CPU usage is high ($cpu_usage%), scaling up..."
+    kubectl scale deployment $DEPLOYMENT_NAME --replicas=$(($REPLICAS + 1)) -n $NAMESPACE
+  fi
+
+  sleep 10
+done
+
+This script scales up the number of replicas in the deployment if the CPU usage exceeds the defined threshold.
+8. Auto-Restart Pods with CrashLoopBackOff Status
+To restart all pods that are stuck in CrashLoopBackOff:
+
+#!/bin/bash
+# Restart pods with CrashLoopBackOff status
+
+kubectl get pods --all-namespaces --field-selector=status.phase!=Running | awk '$3 == "CrashLoopBackOff" {print $1, $2}' | while read line; do
+  namespace=$(echo $line | cut -d' ' -f1)
+  pod_name=$(echo $line | cut -d' ' -f2)
+
+  echo "Pod $namespace/$pod_name is in CrashLoopBackOff, restarting..."
+  kubectl delete pod -n $namespace $pod_name
+done
+
+This script will delete any pod that is in the CrashLoopBackOff state, forcing Kubernetes to recreate it.
+
+Tips:
+Error Handling: Always include checks for the success/failure of commands to improve robustness.
+jq: For JSON parsing, you may need to install jq if it's not available. jq is a powerful tool for filtering and manipulating JSON data.
+kubectl versions: Ensure that the kubectl version is compatible with the Kubernetes cluster version you're working with.
+These are just a few of the advanced shell scripts for interacting with and managing a Kubernetes cluster in real-time. They can be adjusted or expanded depending on your use case. Let me know if you need more help with any specific Kubernetes tasks!
+
+
