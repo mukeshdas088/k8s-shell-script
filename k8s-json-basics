@@ -1,0 +1,127 @@
+It seems like you're looking for examples of how to use `jq` with `kubectl get pods nginx -o json`. Below are a few practical examples of how you can query and filter the JSON output from `kubectl` using `jq`.
+
+### 1. **Print Pod Name and Creation Timestamp**
+
+If you want to print the name of the pod and its creation timestamp, you can extract this information from the `metadata` section of the JSON output.
+
+kubectl get pods nginx -o json | jq -r '.metadata.name + " " + .metadata.creationTimestamp'
+
+
+**Example Output:**
+nginx 2024-12-26T06:42:23Z
+
+
+### 2. **Print Pod Name and Container Image**
+
+You can extract the pod's name and the container image being used in the pod.
+
+kubectl get pods nginx -o json | jq -r '.metadata.name + " " + .spec.containers[0].image'
+
+
+**Example Output:**
+
+nginx nginx
+
+
+This assumes there’s only one container in the pod (`containers[0]`). If there are multiple containers, you can modify the query to target the right index or loop through all containers.
+
+### 3. **Get the Pod's IP Address**
+
+If you want to get the IP address assigned to the pod, you can access the `status` section and look for `podIP`.
+
+kubectl get pods nginx -o json | jq -r '.status.podIP'
+
+
+**Example Output:**
+
+
+192.168.1.4
+
+
+### 4. **Check if Pod has a `startTime` and Print it**
+
+If you want to check if the pod has a `startTime` and print it, you can use the `select` function in `jq` to filter pods that have a `startTime` field.
+
+kubectl get pods nginx -o json | jq -r 'select(.status.startTime != null) | .metadata.name + " started at " + .status.startTime'
+
+**Example Output:**
+
+
+nginx started at 2024-12-26T06:45:23Z
+
+
+If the `startTime` field is `null` or missing, the pod will be skipped.
+
+### 5. **List Pod Names with Labels**
+
+If you want to get the names of the pod along with its labels, you can extract the labels from the `metadata` section.
+
+kubectl get pods nginx -o json | jq -r '.metadata.name + " Labels: " + (.metadata.labels | tostring)'
+
+
+**Example Output:**
+
+nginx Labels: {"run":"nginx"}`
+
+### 6. **Get Pod's Node Name**
+
+You can get the node name where the pod is running by looking at the `nodeName` field in the `status` section.
+
+kubectl get pods nginx -o json | jq -r '.status.nodeName'
+
+**Example Output:**
+
+
+node-1234
+
+
+### 7. **Get Detailed Information (All Fields)**
+
+If you want to see all the details of the `nginx` pod in a readable format, you can just output the whole JSON with `jq`:
+
+bash
+kubectl get pods nginx -o json | jq .
+
+
+This will print the entire pod's JSON structure, which you can then manually inspect for any other fields of interest.
+
+### 8. **Get Container's Resource Requests and Limits**
+
+If you are interested in the resource requests and limits of containers in the pod, you can use this query:
+
+bash
+kubectl get pods nginx -o json | jq -r '.spec.containers[] | .name + " - CPU Requests: " + (.resources.requests.cpu // "None") + ", Memory Requests: " + (.resources.requests.memory // "None")'
+
+
+This will list the resource requests for each container within the pod.
+
+**Example Output:**
+
+
+nginx - CPU Requests: None, Memory Requests: None
+```
+
+### 9. **Check Pod's Restart Count**
+
+To get the restart count of the container (useful to know if the container has crashed), you can use the following command:
+
+get pods nginx -o json | jq -r '.status.containerStatuses[] | .name + " Restart Count: " + (.restartCount | tostring)'
+
+**Example Output:**
+nginx Restart Count: 0
+
+
+This will show the restart count for each container inside the pod. If the pod only has one container (e.g., `nginx`), it will just display that.
+
+---
+
+### Recap of Key Concepts:
+
+- **`kubectl get pods nginx -o json`**: Fetches the pod details in JSON format.
+- **`jq -r`**: Processes the JSON output and outputs it as raw text.
+- **Key Sections**:
+  - `.metadata.name`: The pod’s name.
+  - `.spec.containers`: Information about the container(s) in the pod.
+  - `.status`: Current status of the pod, including IP, node name, and restart count.
+
+By using these `jq` examples, you can extract almost any information you need from the JSON output of `kubectl get pods`. Let me know if you need any more specific examples!
